@@ -31,31 +31,24 @@ typedef enum{
 }ROBOTIC_ARM;
 
 typedef enum{
-  WAIT_DL,
-  NEW_LOCATION,
-  PREDEFINED,
-  GRID,
-  UNKNOWN,
-  READY,
-}DEFINE_LOCATION;
-
-typedef enum{
   WAIT_MOVE,
+  SWEEP,
   SERVOS_MOVE,
   CLAW_CLOSE,
   CLAW_OPEN,
   FINISH,
 }MOVE;
 
-ROBOTIC_ARM cs_robotic_arm=WAIT;
-DEFINE_LOCATION cs_define_location=WAIT_DL;
+ROBOTIC_ARM cs_robotic_arm=WAIT,lastcs_robotic_arm=WAIT;
 MOVE cs_move=WAIT_MOVE;
 
-unsigned long SERVOS_MOVE_TIMER;
+unsigned long SERVOS_MOVE_TIMER,CLAW_CLOSE_TIMER,CLAW_OPEN_TIMER;
+unsigned int MODE=1; //1 for Predefined | 2 for Grid | 3 for Unknown
 bool PICK_UP_MODE=0; //1 if needed grabing
 bool START=0;
 bool FINISHED=0;
 bool START_MOVE=0;
+bool SWEEP_FINISHED=0;
 
 void getRawData_noDelay(uint16_t *r, uint16_t *g, uint16_t *b, uint16_t *c)
 {
@@ -104,7 +97,8 @@ void setup(){
 }
 
 void loop(){
-  /*unsigned long now = millis();
+  ///*
+  unsigned long now = millis();
   if (now - last_cycle > interval) 
   {
     loop_micros = micros();
@@ -157,21 +151,30 @@ void loop(){
         cs_robotic_arm=WAIT;
       }
     }
-
-    switch (cs_define_location)
-    {
-    case :
-      break;
-    
-    default:
-      break;
-    }
   
     switch (cs_move)
     {
     case WAIT_MOVE:
       if(START_MOVE==1)
       {
+        if(cs_robotic_arm==PICK_UP && MODE==3)
+        {
+          cs_move=SWEEP;
+        }
+        else
+        {
+          lastcs_robotic_arm=cs_robotic_arm;
+          START_MOVE=0;
+          cs_move=SERVOS_MOVE;
+          SERVOS_MOVE_TIMER=now;
+        }
+      }
+      break;
+    case SWEEP:
+      if(SWEEP_FINISHED==1)
+      {
+        SWEEP_FINISHED=0;
+        lastcs_robotic_arm=cs_robotic_arm;
         START_MOVE=0;
         cs_move=SERVOS_MOVE;
         SERVOS_MOVE_TIMER=now;
@@ -183,23 +186,66 @@ void loop(){
         if(PICK_UP_MODE==1)
         {
           cs_move=CLAW_CLOSE;
+          CLAW_CLOSE_TIMER=now;
         }
         else
         {
-
+          cs_move=CLAW_OPEN;
+          CLAW_OPEN_TIMER=now;
         }
       }
+      break;
+    case CLAW_CLOSE:
+      if(now-CLAW_CLOSE_TIMER>=500)
+      {
+        cs_move=FINISH;
+      }
+      break;
+    case CLAW_OPEN:
+      if(now-CLAW_OPEN_TIMER>=500)
+      {
+        cs_move=FINISH;
+      }
+      break;
+    case FINISH:
+      if(lastcs_robotic_arm!=cs_robotic_arm)
+      {
+        cs_move=WAIT_MOVE;
+      }
+
     
     default:
       break;
     }
   
+    if(cs_move==SERVOS_MOVE)
+    {
+      if(cs_robotic_arm==PICK_UP && MODE==1)
+      {
 
+      }
+      else if(cs_robotic_arm==PICK_UP && MODE==2)
+      {
+
+      }
+      else if(cs_robotic_arm==PICK_UP && MODE==3)
+      {
+
+      }
+      else if(cs_robotic_arm==READ_COLOUR)
+      {
+
+      }
+      else if(cs_robotic_arm==SORT)
+      {
+
+      }
+    }
 
 
     
-  }*/
-    uint8_t b;
+  }//*/
+    /*uint8_t b;
     if (Serial.available()) {
       
       b = Serial.read();    
@@ -264,6 +310,6 @@ void loop(){
       Serial.print("Dist: ");
       Serial.print(distance, 3);
       Serial.println();
-    }
+    }*/
 }
 
