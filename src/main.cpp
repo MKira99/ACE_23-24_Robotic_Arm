@@ -9,17 +9,34 @@
 
 #define Servo1_PIN 0
 #define Servo2_PIN 1
+#define Servo3_PIN 2
+#define Servo4_PIN 3
+
+#define MAXSERVO1 13.2 //180 graus
+#define MINSERVO1 4.30 //0 graus
+
+#define MAXSERVO2 6.1
+#define MINSERVO2 1.8
+
+#define MAXSERVO3 5.7
+#define MINSERVO3 2.1
+
+#define MAXSERVO4 10.2
+#define MINSERVO4 8
 
 VL53L0X tof;
 float distance, prev_distance;
 RP2040_PWM* PWM_Instance1;
 RP2040_PWM* PWM_Instance2;
+RP2040_PWM* PWM_Instance3;
+RP2040_PWM* PWM_Instance4;
 float PWM_frequency;
-float Servo1_DC=0,Servo2_DC=100;
+float Servo1_DC=100,Servo2_DC=100,Servo3_DC=100,Servo4_DC=100;
 unsigned long interval, last_cycle;
 unsigned long loop_micros;
 commands_t serial_commands;
 int show_lux;
+int counter=0;
 
 Adafruit_TCS34725 tcs = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_24MS, TCS34725_GAIN_1X);
 
@@ -38,6 +55,13 @@ typedef enum{
   CLAW_OPEN,
   FINISH,
 }MOVE;
+
+typedef struct{
+  int s1;
+  int s2;
+  int s3;
+  int s4;
+}SERVO_PRED_POS;
 
 ROBOTIC_ARM cs_robotic_arm=WAIT,lastcs_robotic_arm=WAIT;
 MOVE cs_move=WAIT_MOVE;
@@ -58,12 +82,26 @@ void getRawData_noDelay(uint16_t *r, uint16_t *g, uint16_t *b, uint16_t *c)
   *b = tcs.read16(TCS34725_BDATAL);
 }
 
+void servos_write(int DC1,int DC2,int DC3,int DC4)
+{
+  Servo1_DC=(DC1/100.0)*(MAXSERVO1-MINSERVO1)+MINSERVO1;
+  Servo2_DC=(DC2/100.0)*(MAXSERVO2-MINSERVO2)+MINSERVO2;
+  Servo3_DC=(DC3/100.0)*(MAXSERVO3-MINSERVO3)+MINSERVO3;
+  Servo4_DC=(DC4/100.0)*(MAXSERVO4-MINSERVO4)+MINSERVO4;
+  PWM_Instance1->setPWM(Servo1_PIN, PWM_frequency, Servo1_DC);
+  PWM_Instance2->setPWM(Servo2_PIN, PWM_frequency, Servo2_DC);
+  PWM_Instance3->setPWM(Servo3_PIN, PWM_frequency, Servo3_DC);
+  PWM_Instance4->setPWM(Servo4_PIN, PWM_frequency, Servo4_DC);
+}
+
 void setup(){
   Serial.begin(115200);
 
   PWM_frequency = 50;
   PWM_Instance1 = new RP2040_PWM(Servo1_PIN, PWM_frequency, Servo1_DC);
   PWM_Instance2 = new RP2040_PWM(Servo2_PIN, PWM_frequency, Servo2_DC);
+  PWM_Instance3 = new RP2040_PWM(Servo3_PIN, PWM_frequency, Servo3_DC);
+  PWM_Instance4 = new RP2040_PWM(Servo4_PIN, PWM_frequency, Servo4_DC);
                     
   Wire.setSDA(20);
   Wire.setSCL(21);
@@ -97,7 +135,7 @@ void setup(){
 }
 
 void loop(){
-  ///*
+  /*
   unsigned long now = millis();
   if (now - last_cycle > interval) 
   {
@@ -244,8 +282,8 @@ void loop(){
 
 
     
-  }//*/
-    /*uint8_t b;
+  }*/
+    uint8_t b;
     if (Serial.available()) {
       
       b = Serial.read();    
@@ -262,13 +300,32 @@ void loop(){
       else if (b == 'w'){
         Servo2_DC += 0.1;
       }
+      if (b == 'd'){
+        Servo3_DC -= 0.1; 
+      }
+      else if (b == 'e'){
+        Servo3_DC += 0.1;
+      }
+      else if (b == 'f'){
+        Servo4_DC -= 0.1;
+      }
+      else if (b == 'r'){
+        Servo4_DC += 0.1;
+      }
       else serial_commands.process_char(b);
 
       if (Servo1_DC > 13.2) Servo1_DC = 13.2;
-      if (Servo1_DC < 2.90) Servo1_DC = 2.90;
+      if (Servo1_DC < 4.30) Servo1_DC = 4.30;
+      
 
-      if (Servo2_DC > 20) Servo2_DC = 20;
+      if (Servo2_DC > 15) Servo2_DC = 15;
       if (Servo2_DC < 0) Servo2_DC = 0;
+
+      if (Servo3_DC > 15) Servo3_DC = 15;
+      if (Servo3_DC < 0) Servo3_DC = 0;
+
+      if (Servo4_DC > 10.2) Servo4_DC = 10.2;
+      if (Servo4_DC < 8) Servo3_DC = 9;
     }
     unsigned long now = millis();
     if (now - last_cycle > interval) {
@@ -281,35 +338,60 @@ void loop(){
       colorTemp = tcs.calculateColorTemperature_dn40(r, g, b, c);
       if (show_lux) lux = tcs.calculateLux(r, g, b);
 
-      Serial.print("Color Temp: "); Serial.print(colorTemp, DEC); Serial.print(" K - ");
+      /*Serial.print("Color Temp: "); Serial.print(colorTemp, DEC); Serial.print(" K - ");
       if (show_lux) Serial.print("Lux: "); Serial.print(lux, DEC); Serial.print(" - ");
       Serial.print("R: "); Serial.print(r, DEC); Serial.print(" ");
       Serial.print("G: "); Serial.print(g, DEC); Serial.print(" ");
       Serial.print("B: "); Serial.print(b, DEC); Serial.print(" ");
       Serial.print("C: "); Serial.print(c, DEC); Serial.print(" ");
-      Serial.print("\n");
+      Serial.print("\n");*/
       
       // Update the LED intensity
-      PWM_Instance1->setPWM(Servo1_PIN, PWM_frequency, Servo1_DC);
+      /*PWM_Instance1->setPWM(Servo1_PIN, PWM_frequency, Servo1_DC);
       PWM_Instance2->setPWM(Servo2_PIN, PWM_frequency, Servo2_DC);
+      PWM_Instance3->setPWM(Servo3_PIN, PWM_frequency, Servo3_DC);
+      PWM_Instance4->setPWM(Servo4_PIN, PWM_frequency, Servo4_DC);*/
 
 
       // Debug using the serial port
+
+      counter+=10;
+      if(counter>100)
+      {
+        counter=0;
+      }
+
+      int s2,s3;
+      s2=counter;
+      s3=counter;
+
+      s2=abs(s2-100);
+      s3=abs(s3-100);
+
+      //servos_write(50,50,50,50);
+      servos_write(50,s2,s3,50);
+
       Serial.print("DC Servo1 : ");
       Serial.print(Servo1_DC);
       Serial.print("\n");
       Serial.print("DC Servo2 : ");
       Serial.print(Servo2_DC);
       Serial.print("\n");
+      Serial.print("DC Servo3 : ");
+      Serial.print(Servo3_DC);
+      Serial.print("\n");
+      Serial.print("DC Servo4    : ");
+      Serial.print(Servo4_DC);
+      Serial.print("\n");
 
-      if (tof.readRangeAvailable()) {
+      /*if (tof.readRangeAvailable()) {
       prev_distance = distance;
       distance = tof.readRangeMillimeters() * 1e-3;
       }
       tof.startReadRangeMillimeters(); 
       Serial.print("Dist: ");
       Serial.print(distance, 3);
-      Serial.println();
-    }*/
+      Serial.println();*/
+    }
 }
 
