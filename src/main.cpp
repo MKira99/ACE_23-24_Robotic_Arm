@@ -52,9 +52,9 @@ typedef enum{
 typedef enum{
   WAIT_MOVE,
   SWEEP,
-  SERVOS_MOVE,
-  CLAW_CLOSE,
-  CLAW_OPEN,
+  SERVOS_ROTATE,
+  SERVOS_ADVANCE,
+  CLAW,
   RETRACT,
   FINISH,
 }MOVE;
@@ -67,9 +67,10 @@ typedef struct{
 ROBOTIC_ARM cs_robotic_arm=WAIT,lastcs_robotic_arm=WAIT;
 MOVE cs_move=WAIT_MOVE;
 
-unsigned long SERVOS_MOVE_TIMER,CLAW_CLOSE_TIMER,CLAW_OPEN_TIMER,RETRACT_TIMER;
+unsigned long SERVOS_ADVANCE_TIMER,SERVOS_ROTATE_TIMER,CLAW_TIMER,RETRACT_TIMER;
 unsigned int MODE=1; //1 for Predefined | 2 for Grid | 3 for Unknown
-bool PICK_UP_MODE=0; //1 if needed grabing
+bool CLAW_CHANGE=0;
+bool CLAW_OPEN_OR_CLOSE=1; // 0 for close | 1 for open
 bool START=0;
 bool FINISHED=0;
 bool START_MOVE=0;
@@ -97,12 +98,11 @@ void getRawData_noDelay(uint16_t *r, uint16_t *g, uint16_t *b, uint16_t *c)
   *b = tcs.read16(TCS34725_BDATAL);
 }
 
-void servos_write(int DC1,int DC2,int DC3,int DC4)
+void servos_write(int DC1,int DC2,int DC3)
 {
   Servo1_DC=(DC1/100.0)*(MAXSERVO1-MINSERVO1)+MINSERVO1;
   Servo2_DC=(DC2/100.0)*(MAXSERVO2-MINSERVO2)+MINSERVO2;
   Servo3_DC=(DC3/100.0)*(MAXSERVO3-MINSERVO3)+MINSERVO3;
-  Servo4_DC=(DC4/100.0)*(MAXSERVO4-MINSERVO4)+MINSERVO4;
   if(DC2==-1) Servo2_DC=MAXSERVO2_MOVE;
   if(DC3==-1) Servo3_DC=MAXSERVO3;
   if(DC1==-2) Servo1_DC=4;
@@ -111,21 +111,25 @@ void servos_write(int DC1,int DC2,int DC3,int DC4)
   PWM_Instance1->setPWM(Servo1_PIN, PWM_frequency, Servo1_DC);
   PWM_Instance2->setPWM(Servo2_PIN, PWM_frequency, Servo2_DC);
   PWM_Instance3->setPWM(Servo3_PIN, PWM_frequency, Servo3_DC);
-  PWM_Instance4->setPWM(Servo4_PIN, PWM_frequency, Servo4_DC);
 }
 void servos_init_pos()
 {
   PWM_Instance1->setPWM(Servo1_PIN, PWM_frequency, (50/100.0)*(MAXSERVO1-MINSERVO1)+MINSERVO1);
   PWM_Instance2->setPWM(Servo2_PIN, PWM_frequency, MAXSERVO2_MOVE);
   PWM_Instance3->setPWM(Servo3_PIN, PWM_frequency, MAXSERVO3);
-  PWM_Instance4->setPWM(Servo4_PIN, PWM_frequency, 2);
+  PWM_Instance4->setPWM(Servo4_PIN, PWM_frequency, 11.5);
 }
-void servos_sort_pos()
+void servos_readc_pos_4rot()
 {
   PWM_Instance1->setPWM(Servo1_PIN, PWM_frequency, 4);
   PWM_Instance2->setPWM(Servo2_PIN, PWM_frequency, 3.1);
   PWM_Instance3->setPWM(Servo3_PIN, PWM_frequency, 6.5);
-  PWM_Instance4->setPWM(Servo4_PIN, PWM_frequency, 2);
+}
+void servos_readc_pos_4adv()
+{
+  PWM_Instance1->setPWM(Servo1_PIN, PWM_frequency, 4);
+  PWM_Instance2->setPWM(Servo2_PIN, PWM_frequency, 2);
+  PWM_Instance3->setPWM(Servo3_PIN, PWM_frequency, 5);
 }
 
 void setup(){
@@ -209,8 +213,8 @@ void loop()
         START_MOVE=1;
         lastcs_robotic_arm=SORT;
         cs_robotic_arm=PICK_UP;
-        PICK_UP_MODE=1;
         FINISHED=0;
+        CLAW_CHANGE=1;
       }
     break;
     case PICK_UP:
@@ -221,7 +225,6 @@ void loop()
         START_MOVE=1;
         lastcs_robotic_arm=cs_robotic_arm;
         cs_robotic_arm=READ_COLOUR;
-        PICK_UP_MODE=1;
       }
     break;
     case READ_COLOUR:
@@ -232,7 +235,7 @@ void loop()
         START_MOVE=1;
         lastcs_robotic_arm=cs_robotic_arm;
         cs_robotic_arm=SORT;
-        PICK_UP_MODE=0;
+        CLAW_CHANGE=1;
       }
     break;
     case SORT:
@@ -259,8 +262,8 @@ void loop()
         {
           lastcs_robotic_arm=cs_robotic_arm;
           START_MOVE=0;
-          cs_move=SERVOS_MOVE;
-          SERVOS_MOVE_TIMER=now;
+          cs_move=SERVOS_ROTATE;
+          SERVOS_ROTATE_TIMER=now;
         }
       }
       break;
@@ -271,37 +274,47 @@ void loop()
         SWEEP_FINISHED=0;
         lastcs_robotic_arm=cs_robotic_arm;
         START_MOVE=0;
-        cs_move=SERVOS_MOVE;
-        SERVOS_MOVE_TIMER=now;
+        cs_move=SERVOS_ROTATE;
+        SERVOS_ROTATE_TIMER=now;
       }
       break;
-    case SERVOS_MOVE:
-    Serial.print("SERVOS_MOVE\n");
-      if(now-SERVOS_MOVE_TIMER>=2000)
+    case SERVOS_ROTATE:
+    Serial.print("SERVOS_ROTATE\n");
+     if(now - SERVOS_ROTATE_TIMER >= 1000)
+     {
+      cs_move=SERVOS_ADVANCE;
+      SERVOS_ADVANCE_TIMER=now;
+     }
+      
+      break;
+    case SERVOS_ADVANCE:
+    Serial.print("SERVOS_ADVANCE\n");
+      if(now-SERVOS_ADVANCE_TIMER>=1000)
       {
-        if(PICK_UP_MODE==1)
+        if(CLAW_CHANGE==1)
         {
-          cs_move=CLAW_CLOSE;
-          CLAW_CLOSE_TIMER=now;
+          cs_move=CLAW;
+          CLAW_TIMER=now;
+          if(CLAW_OPEN_OR_CLOSE==1)
+          {
+            CLAW_OPEN_OR_CLOSE=0;
+          }
+          else
+          {
+            CLAW_OPEN_OR_CLOSE=1;
+          }
+          CLAW_CHANGE=0;
         }
         else
         {
-          cs_move=CLAW_OPEN;
-          CLAW_OPEN_TIMER=now;
+          cs_move=RETRACT;
+          RETRACT_TIMER=now;
         }
       }
       break;
-    case CLAW_CLOSE:
+    case CLAW:
     Serial.print("CLAW_CLOSE\n");
-      if(now-CLAW_CLOSE_TIMER>=2000)
-      {
-        FINISHED=1;
-        cs_move=FINISH;
-      }
-      break;
-    case CLAW_OPEN:
-    Serial.print("CLAW_OPEN\n");
-      if(now-CLAW_OPEN_TIMER>=2000)
+      if(now-CLAW_TIMER>=500)
       {
         RETRACT_TIMER=now;
         cs_move=RETRACT;
@@ -309,7 +322,7 @@ void loop()
       break;
     case RETRACT:
     Serial.print("RETRACT\n");
-      if(now-RETRACT_TIMER>=2000)
+      if(now-RETRACT_TIMER>=1000)
       {
         FINISHED=1;
         cs_move=FINISH;
@@ -327,73 +340,115 @@ void loop()
       break;
     }
   
-    if(cs_move==SERVOS_MOVE)
+    if(cs_move==SERVOS_ROTATE)
     {
-      if(cs_robotic_arm==PICK_UP && MODE==1 && now-SERVOS_MOVE_TIMER<500)
+      if(cs_robotic_arm==PICK_UP && MODE==1)
       {
         Serial.print("1\n");
-        servos_write(PRED_POS.rot,-1,-1,0);
+        servos_write(PRED_POS.rot,-1,-1);
       }
-      else if(cs_robotic_arm==PICK_UP && MODE==1 && now-SERVOS_MOVE_TIMER>500)
+      else if(cs_robotic_arm==PICK_UP && MODE==2)
       {
-        Serial.print("2\n");
-        servos_write(PRED_POS.rot,PRED_POS.dist,PRED_POS.dist,100);
+        servos_write(GRID[GOTOGRID-1].rot,-1,-1);
       }
-      else if(cs_robotic_arm==PICK_UP && MODE==2 && now-SERVOS_MOVE_TIMER<500)
+      else if(cs_robotic_arm==PICK_UP && MODE==3)
       {
-        servos_write(GRID[GOTOGRID-1].rot,-1,-1,100);
-      }
-      else if(cs_robotic_arm==PICK_UP && MODE==2 && now-SERVOS_MOVE_TIMER>500)
-      {
-        servos_write(GRID[GOTOGRID-1].rot,GRID[GOTOGRID-1].dist,GRID[GOTOGRID-1].dist,100);
-      }
-      else if(cs_robotic_arm==PICK_UP && MODE==3 && now-SERVOS_MOVE_TIMER<500)
-      {
-        servos_write(UNKNOWN_POS.rot,-1,-1,100);
-      }
-      else if(cs_robotic_arm==PICK_UP && MODE==3 && now-SERVOS_MOVE_TIMER<500)
-      {
-        servos_write(UNKNOWN_POS.rot,UNKNOWN_POS.dist,UNKNOWN_POS.dist,100);
+        servos_write(UNKNOWN_POS.rot,-1,-1);
       }
       else if(cs_robotic_arm==READ_COLOUR)
       {
-        servos_sort_pos();
+        servos_readc_pos_4rot();
       }
       else if(cs_robotic_arm==SORT)
       {
         if(COLOUR_READ==1)
         {
           Serial.print("YELLOW\n");
-          servos_write(SORT_YELLOW_POS.rot,SORT_YELLOW_POS.dist,SORT_YELLOW_POS.dist,0);
+          servos_write(SORT_YELLOW_POS.rot,-1,-1);
         }
         else if(COLOUR_READ==2)
         {
           Serial.print("GREEN\n");
-          servos_write(SORT_GREEN_POS.rot,SORT_GREEN_POS.dist,SORT_GREEN_POS.dist,0);
+          servos_write(SORT_GREEN_POS.rot,-1,-1);
+        }
+      }
+    }
+    else if(cs_move==SERVOS_ADVANCE)
+    {
+      if(cs_robotic_arm==PICK_UP && MODE==1)
+      {
+        Serial.print("1\n");
+        servos_write(PRED_POS.rot,PRED_POS.dist,PRED_POS.dist);
+      }
+      else if(cs_robotic_arm==PICK_UP && MODE==2)
+      {
+        servos_write(GRID[GOTOGRID-1].rot,GRID[GOTOGRID-1].dist,GRID[GOTOGRID-1].dist);
+      }
+      else if(cs_robotic_arm==PICK_UP && MODE==3)
+      {
+        servos_write(UNKNOWN_POS.rot,UNKNOWN_POS.dist,UNKNOWN_POS.dist);
+      }
+      else if(cs_robotic_arm==READ_COLOUR)
+      {
+        servos_readc_pos_4adv();
+      }
+      else if(cs_robotic_arm==SORT)
+      {
+        if(COLOUR_READ==1)
+        {
+          Serial.print("YELLOW\n");
+          servos_write(SORT_YELLOW_POS.rot,SORT_YELLOW_POS.dist,SORT_YELLOW_POS.dist);
+        }
+        else if(COLOUR_READ==2)
+        {
+          Serial.print("GREEN\n");
+          servos_write(SORT_GREEN_POS.rot,SORT_GREEN_POS.dist,SORT_GREEN_POS.dist);
         }
       }
     }
     else if(cs_move==RETRACT)
     {
-      if(COLOUR_READ==1)
+      if(cs_robotic_arm==PICK_UP && MODE==1)
       {
-        Serial.print("YELLOW_RETRACT\n");
-        servos_write(SORT_YELLOW_POS.rot,-1,-1,100);
+        Serial.print("1\n");
+        servos_write(PRED_POS.rot,-1,-1);
       }
-      else if(COLOUR_READ==2)
+      else if(cs_robotic_arm==PICK_UP && MODE==2)
       {
-        Serial.print("GREEN_RETRACT\n");
-        servos_write(SORT_GREEN_POS.rot,-1,-1,100);
+        servos_write(GRID[GOTOGRID-1].rot,-1,-1);
+      }
+      else if(cs_robotic_arm==PICK_UP && MODE==3)
+      {
+        servos_write(UNKNOWN_POS.rot,-1,-1);
+      }
+      else if(cs_robotic_arm==SORT)
+      {
+        if(COLOUR_READ==1)
+        {
+          Serial.print("YELLOW\n");
+          servos_write(SORT_YELLOW_POS.rot,-1,-1);
+        }
+        else if(COLOUR_READ==2)
+        {
+          Serial.print("GREEN\n");
+          servos_write(SORT_GREEN_POS.rot,-1,-1);
+        }
       }
     }
-    if(cs_move==CLAW_CLOSE)
+    else if(cs_move==CLAW)
     {
-      PWM_Instance4->setPWM(Servo4_PIN, PWM_frequency, 2);
+      if(CLAW_OPEN_OR_CLOSE==1)
+      {
+        Serial.print("OPEN\n");
+        PWM_Instance4->setPWM(Servo4_PIN, PWM_frequency, 11.5);
+      }
+      else
+      {
+        Serial.print("CLOSE\n");
+        PWM_Instance4->setPWM(Servo4_PIN, PWM_frequency, 2);
+      }
     }
-    else if(cs_move==CLAW_OPEN)
-    {
-      PWM_Instance4->setPWM(Servo4_PIN, PWM_frequency, 11.5);
-    }
+    
     if(cs_robotic_arm==WAIT)
     {
       servos_init_pos();
