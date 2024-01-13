@@ -13,8 +13,7 @@
 #define Servo4_PIN 3
 
 #define MAXSERVO1 13.2 //180 graus
-#define MINSERVO1 6 //0 graus
-#define MINSERVO1_MOVE 4
+#define MINSERVO1 4
 
 #define MAXSERVO2_MOVE 4.9
 #define MAXSERVO2 3.1
@@ -60,8 +59,8 @@ typedef enum{
 }MOVE;
 
 typedef struct{
-  int rot;
-  int dist;
+  float rot;
+  float dist;
 }SERVO_PRED_POS;
 
 ROBOTIC_ARM cs_robotic_arm=WAIT,lastcs_robotic_arm=WAIT;
@@ -69,6 +68,7 @@ MOVE cs_move=WAIT_MOVE;
 
 unsigned long SERVOS_ADVANCE_TIMER,SERVOS_ROTATE_TIMER,CLAW_TIMER,RETRACT_TIMER;
 unsigned int MODE=1; //1 for Predefined | 2 for Grid | 3 for Unknown
+unsigned int OP_MODE=1;
 bool CLAW_CHANGE=0;
 bool CLAW_OPEN_OR_CLOSE=1; // 0 for close | 1 for open
 bool START=0;
@@ -79,15 +79,17 @@ bool SWEEP_FINISHED=0;
 unsigned int count=0;
 bool count_aux=0;
 unsigned int slow_rot=0, slow_dist=0;
+unsigned int count_print=0;
 
-SERVO_PRED_POS GRID[9]={{10,100},{10,50},{10,0},{50,100},{50,50},{50,0},{90,100},{90,50},{90,0}};
-SERVO_PRED_POS PRED_POS={50,50};
+SERVO_PRED_POS GRID[9]={{41.5,100},{41.5,50},{41.5,0},{61,100},{61,50},{61,0},{80.5,100},{80.5,50},{80.5,0}};
+SERVO_PRED_POS PRED_POS={61,50};
 SERVO_PRED_POS UNKNOWN_POS={0,0};
-SERVO_PRED_POS READ_COLOUR_POS={0,0};
-SERVO_PRED_POS SORT_GREEN_POS={-3,0};
-SERVO_PRED_POS SORT_YELLOW_POS={-2,0};
+SERVO_PRED_POS READ_COLOUR_POS={0,50};
+SERVO_PRED_POS SORT_GREEN_POS={5,0};
+SERVO_PRED_POS SORT_YELLOW_POS={15,0};
 
 unsigned int GOTOGRID=1;
+unsigned int OP_GOTOGRID=1;
 unsigned int COLOUR_READ=1;
 
 void getRawData_noDelay(uint16_t *r, uint16_t *g, uint16_t *b, uint16_t *c)
@@ -105,8 +107,6 @@ void servos_write(int DC1,int DC2,int DC3)
   Servo3_DC=(DC3/100.0)*(MAXSERVO3-MINSERVO3)+MINSERVO3;
   if(DC2==-1) Servo2_DC=MAXSERVO2_MOVE;
   if(DC3==-1) Servo3_DC=MAXSERVO3;
-  if(DC1==-2) Servo1_DC=4;
-  if(DC1==-3) Servo1_DC=5;
 
   PWM_Instance1->setPWM(Servo1_PIN, PWM_frequency, Servo1_DC);
   PWM_Instance2->setPWM(Servo2_PIN, PWM_frequency, Servo2_DC);
@@ -114,7 +114,7 @@ void servos_write(int DC1,int DC2,int DC3)
 }
 void servos_init_pos()
 {
-  PWM_Instance1->setPWM(Servo1_PIN, PWM_frequency, (50/100.0)*(MAXSERVO1-MINSERVO1)+MINSERVO1);
+  PWM_Instance1->setPWM(Servo1_PIN, PWM_frequency, (61/100.0)*(MAXSERVO1-MINSERVO1)+MINSERVO1);
   PWM_Instance2->setPWM(Servo2_PIN, PWM_frequency, MAXSERVO2_MOVE);
   PWM_Instance3->setPWM(Servo3_PIN, PWM_frequency, MAXSERVO3);
   PWM_Instance4->setPWM(Servo4_PIN, PWM_frequency, 11.5);
@@ -188,7 +188,70 @@ void loop()
       if(key == 'z'){
         START=1;
       }
+      else if (key == '1'){
+        GOTOGRID=1;
+        MODE=2;
+      }
+      else if (key == '2'){
+        GOTOGRID=2;
+        MODE=2;
+      }
+      else if (key == '3'){
+        GOTOGRID=3;
+        MODE=2;
+      }
+      else if(key == '4'){
+        GOTOGRID=4;
+        MODE=2;
+      }
+      else if(key == '5'){
+        GOTOGRID=5;
+        MODE=2;
+      }
+      else if(key == '6'){
+        GOTOGRID=6;
+        MODE=2;
+      }
+      else if(key == '7'){
+        GOTOGRID=7;
+        MODE=2;
+      }
+      else if(key == '8'){
+        GOTOGRID=8;
+        MODE=2;
+      }
+      else if(key == '9'){
+        GOTOGRID=9;
+        MODE=2;
+      }
+      else if(key == 'p')
+      {
+        MODE=1;
+      }
     }
+    count_print++;
+    if(count_print>100)
+    {
+      Serial.print("Selected Mode: ");
+      Serial.print(MODE);
+      if(MODE==2)
+      {
+        Serial.print(" | Selected Grid: ");
+        Serial.print(GOTOGRID);
+      }
+      Serial.print("\n");
+
+      Serial.print("OP_Mode: ");
+      Serial.print(OP_MODE);
+      if(OP_MODE==2)
+      {
+        Serial.print(" | OP_GOTOGRID: ");
+        Serial.print(OP_GOTOGRID);
+      }
+      Serial.print("\n");
+      count_print=0;
+    }
+    
 
     uint16_t r, g, b, c, colorTemp, lux;
     getRawData_noDelay(&r, &g, &b, &c);
@@ -206,7 +269,6 @@ void loop()
     switch (cs_robotic_arm)
     {
     case WAIT:
-    Serial.print("WAIT\n");
       if(START==1)
       {
         START=0;
@@ -215,10 +277,14 @@ void loop()
         cs_robotic_arm=PICK_UP;
         FINISHED=0;
         CLAW_CHANGE=1;
+        OP_MODE=MODE;
+        if(OP_MODE==2)
+        {
+          OP_GOTOGRID=GOTOGRID;
+        }
       }
     break;
     case PICK_UP:
-    Serial.print("PICK_UP\n");
       if(FINISHED==1)
       {
         FINISHED=0;
@@ -228,7 +294,6 @@ void loop()
       }
     break;
     case READ_COLOUR:
-    Serial.print("READ_COLOUR\n");
       if(FINISHED==1)
       {
         FINISHED=0;
@@ -239,7 +304,6 @@ void loop()
       }
     break;
     case SORT:
-    Serial.print("SORT\n");
       if(FINISHED==1)
       {
         FINISHED=0;
@@ -251,10 +315,9 @@ void loop()
     switch (cs_move)
     {
     case WAIT_MOVE:
-      Serial.print("WAIT_MOVE\n");
       if(START_MOVE==1)
       {
-        if(cs_robotic_arm==PICK_UP && MODE==3)
+        if(cs_robotic_arm==PICK_UP && OP_MODE==3)
         {
           cs_move=SWEEP;
         }
@@ -268,7 +331,6 @@ void loop()
       }
       break;
     case SWEEP:
-    Serial.print("SWEEP\n");
       if(SWEEP_FINISHED==1)
       {
         SWEEP_FINISHED=0;
@@ -279,7 +341,6 @@ void loop()
       }
       break;
     case SERVOS_ROTATE:
-    Serial.print("SERVOS_ROTATE\n");
      if(now - SERVOS_ROTATE_TIMER >= 1000)
      {
       cs_move=SERVOS_ADVANCE;
@@ -288,7 +349,6 @@ void loop()
       
       break;
     case SERVOS_ADVANCE:
-    Serial.print("SERVOS_ADVANCE\n");
       if(now-SERVOS_ADVANCE_TIMER>=1000)
       {
         if(CLAW_CHANGE==1)
@@ -313,7 +373,6 @@ void loop()
       }
       break;
     case CLAW:
-    Serial.print("CLAW_CLOSE\n");
       if(now-CLAW_TIMER>=500)
       {
         RETRACT_TIMER=now;
@@ -321,7 +380,6 @@ void loop()
       }
       break;
     case RETRACT:
-    Serial.print("RETRACT\n");
       if(now-RETRACT_TIMER>=1000)
       {
         FINISHED=1;
@@ -329,7 +387,6 @@ void loop()
       }
       break;
     case FINISH:
-    Serial.print("FINISH\n");
       if(lastcs_robotic_arm!=cs_robotic_arm)
       {
         cs_move=WAIT_MOVE;
@@ -342,16 +399,16 @@ void loop()
   
     if(cs_move==SERVOS_ROTATE)
     {
-      if(cs_robotic_arm==PICK_UP && MODE==1)
+      if(cs_robotic_arm==PICK_UP && OP_MODE==1)
       {
         Serial.print("1\n");
         servos_write(PRED_POS.rot,-1,-1);
       }
-      else if(cs_robotic_arm==PICK_UP && MODE==2)
+      else if(cs_robotic_arm==PICK_UP && OP_MODE==2)
       {
-        servos_write(GRID[GOTOGRID-1].rot,-1,-1);
+        servos_write(GRID[OP_GOTOGRID-1].rot,-1,-1);
       }
-      else if(cs_robotic_arm==PICK_UP && MODE==3)
+      else if(cs_robotic_arm==PICK_UP && OP_MODE==3)
       {
         servos_write(UNKNOWN_POS.rot,-1,-1);
       }
@@ -375,16 +432,16 @@ void loop()
     }
     else if(cs_move==SERVOS_ADVANCE)
     {
-      if(cs_robotic_arm==PICK_UP && MODE==1)
+      if(cs_robotic_arm==PICK_UP && OP_MODE==1)
       {
         Serial.print("1\n");
         servos_write(PRED_POS.rot,PRED_POS.dist,PRED_POS.dist);
       }
-      else if(cs_robotic_arm==PICK_UP && MODE==2)
+      else if(cs_robotic_arm==PICK_UP && OP_MODE==2)
       {
-        servos_write(GRID[GOTOGRID-1].rot,GRID[GOTOGRID-1].dist,GRID[GOTOGRID-1].dist);
+        servos_write(GRID[OP_GOTOGRID-1].rot,GRID[OP_GOTOGRID-1].dist,GRID[OP_GOTOGRID-1].dist);
       }
-      else if(cs_robotic_arm==PICK_UP && MODE==3)
+      else if(cs_robotic_arm==PICK_UP && OP_MODE==3)
       {
         servos_write(UNKNOWN_POS.rot,UNKNOWN_POS.dist,UNKNOWN_POS.dist);
       }
@@ -408,16 +465,16 @@ void loop()
     }
     else if(cs_move==RETRACT)
     {
-      if(cs_robotic_arm==PICK_UP && MODE==1)
+      if(cs_robotic_arm==PICK_UP && OP_MODE==1)
       {
         Serial.print("1\n");
         servos_write(PRED_POS.rot,-1,-1);
       }
-      else if(cs_robotic_arm==PICK_UP && MODE==2)
+      else if(cs_robotic_arm==PICK_UP && OP_MODE==2)
       {
-        servos_write(GRID[GOTOGRID-1].rot,-1,-1);
+        servos_write(GRID[OP_GOTOGRID-1].rot,-1,-1);
       }
-      else if(cs_robotic_arm==PICK_UP && MODE==3)
+      else if(cs_robotic_arm==PICK_UP && OP_MODE==3)
       {
         servos_write(UNKNOWN_POS.rot,-1,-1);
       }
