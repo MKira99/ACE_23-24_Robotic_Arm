@@ -81,16 +81,16 @@ bool count_aux=0;
 unsigned int slow_rot=0, slow_dist=0;
 unsigned int count_print=0;
 
-SERVO_PRED_POS GRID[9]={{41.5,100},{41.5,50},{41.5,0},{61,100},{61,50},{61,0},{80.5,100},{80.5,50},{80.5,0}};
+SERVO_PRED_POS GRID[9]={{38,100},{38,50},{38,0},{61,100},{61,50},{61,0},{80,100},{80,50},{80,0}};
 SERVO_PRED_POS PRED_POS={61,50};
 SERVO_PRED_POS UNKNOWN_POS={0,0};
-SERVO_PRED_POS READ_COLOUR_POS={0,50};
+SERVO_PRED_POS READ_COLOUR_POS={100,100};
 SERVO_PRED_POS SORT_GREEN_POS={5,0};
-SERVO_PRED_POS SORT_YELLOW_POS={15,0};
+SERVO_PRED_POS SORT_YELLOW_POS={11,0};
 
 unsigned int GOTOGRID=1;
 unsigned int OP_GOTOGRID=1;
-unsigned int COLOUR_READ=1;
+unsigned int COLOUR_READ=2;
 
 void getRawData_noDelay(uint16_t *r, uint16_t *g, uint16_t *b, uint16_t *c)
 {
@@ -119,37 +119,37 @@ void servos_init_pos()
   PWM_Instance3->setPWM(Servo3_PIN, PWM_frequency, MAXSERVO3);
   PWM_Instance4->setPWM(Servo4_PIN, PWM_frequency, 11.5);
 }
-void servos_readc_pos_4rot()
-{
-  PWM_Instance1->setPWM(Servo1_PIN, PWM_frequency, 4);
-  PWM_Instance2->setPWM(Servo2_PIN, PWM_frequency, 3.1);
-  PWM_Instance3->setPWM(Servo3_PIN, PWM_frequency, 6.5);
-}
-void servos_readc_pos_4adv()
-{
-  PWM_Instance1->setPWM(Servo1_PIN, PWM_frequency, 4);
-  PWM_Instance2->setPWM(Servo2_PIN, PWM_frequency, 2);
-  PWM_Instance3->setPWM(Servo3_PIN, PWM_frequency, 5);
-}
 
 void setup(){
   Serial.begin(115200);
+  Serial.print("Starting...\n");
 
   PWM_frequency = 50;
   PWM_Instance1 = new RP2040_PWM(Servo1_PIN, PWM_frequency, Servo1_DC);
   PWM_Instance2 = new RP2040_PWM(Servo2_PIN, PWM_frequency, Servo2_DC);
   PWM_Instance3 = new RP2040_PWM(Servo3_PIN, PWM_frequency, Servo3_DC);
   PWM_Instance4 = new RP2040_PWM(Servo4_PIN, PWM_frequency, Servo4_DC);
+
+  PWM_Instance1->setPWM(Servo1_PIN, PWM_frequency, (61/100.0)*(MAXSERVO1-MINSERVO1)+MINSERVO1);
+  PWM_Instance2->setPWM(Servo2_PIN, PWM_frequency, MAXSERVO2_MOVE);
+  PWM_Instance3->setPWM(Servo3_PIN, PWM_frequency, MAXSERVO3);
+  PWM_Instance4->setPWM(Servo4_PIN, PWM_frequency, 11.5);
                     
   Wire.setSDA(20);
   Wire.setSCL(21);
+
+  Serial.print("Starting I2C...\n");
   
 
   Wire1.setSDA(18);
   Wire1.setSCL(19);
+
+  Serial.print("Starting I2C1...\n");
   
   Wire.begin();
   Wire1.begin();
+
+  Serial.print("Begin I2Cs...\n");
   
   while (!tcs.begin()) {
     Serial.println("No TCS34725 found ... check your connections");
@@ -414,7 +414,7 @@ void loop()
       }
       else if(cs_robotic_arm==READ_COLOUR)
       {
-        servos_readc_pos_4rot();
+        servos_write(READ_COLOUR_POS.rot,-1,-1);
       }
       else if(cs_robotic_arm==SORT)
       {
@@ -447,7 +447,7 @@ void loop()
       }
       else if(cs_robotic_arm==READ_COLOUR)
       {
-        servos_readc_pos_4adv();
+        servos_write(READ_COLOUR_POS.rot,READ_COLOUR_POS.dist,READ_COLOUR_POS.dist);
       }
       else if(cs_robotic_arm==SORT)
       {
